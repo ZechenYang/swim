@@ -1,4 +1,14 @@
 """
+Active Matter Model H
+A script to study active matter
+
+Pass it a .cfg file to specify parameters for the particular solve.
+To run using 4 processes, you would use:
+    $ mpiexec -n 4 python3 mri.py mri_params.cfg
+"""
+
+
+"""
 Dedalus script for 2D incompressible hydrodynamics with moving immersed boundary.
 
 This script uses a Fourier basis in both y directions.
@@ -14,32 +24,68 @@ To run using 4 processes (e.g), you could use:
 
 """
 
-import numpy as np
-from mpi4py import MPI
+import os
 import time
-import body_inext as bdy
-
-from dedalus import public as de
+import configparser
+from configparser import ConfigParser
+from pathlib import Path
+import numpy as np
+import sys
+import dedalus.public as de
 from dedalus.tools  import post
 from dedalus.extras import flow_tools
 
+from mpi4py import MPI
+
+# CW = MPI.COMM_WORLD
 import logging
+
 logger = logging.getLogger(__name__)
+
+import body_v1 as bdy
 
 comm = MPI.COMM_WORLD
 rank = comm.rank
 
-# Parameters
-dt = 0.001 # timestep
-Lx = 8.    # box size in x
-Ly = 8.    # box size in y
-ν  = 0.1   # viscosity
-γ  = 40    # coupling parameter for immersed boundary
-hw = 0.1   # half-width of sheet
-b = 0.1    # amplitude of sheet (b in Taylor 1951 eq 1)
-sigma = 1. # swimming frequency (sigma in Taylor 1951 eq 1)
+
+# Parses .cfg filename passed to script
+config_file = Path(sys.argv[-1])
+
+# Parse .cfg file to set global parameters for script
+config = ConfigParser()
+config.read(str(config_file))
+
+logger.info('Running model_H.py with the following parameters:')
+logger.info(config.items('parameters'))
+
+params = config['parameters']
+# Simulation
+Lx = params.getfloat('Lx') # box size in x
+Ly = params.getfloat('Ly') # box size in y
+
+# FLuid
+vis = params.getfloat('vis') # viscosity
+γ = params.getfloat('γ') # coupling parameter for immersed boundary
+hw = params.getfloat('half_width') # half-width of sheet
+
+# Swimmer
+b = params.getfloat('b') # amplitude of sheet (b in Taylor 1951 eq 1)
+sigma = params.getfloat('sigma') # swimming frequency (sigma in Taylor 1951 eq 1)
+delta = params.getfloat('delta') # tanh width for mask;
+
 k = 4*np.pi/Ly # wavenumber of sheet frequency (k in Taylor 1951 eq 1)
-delta = 0.05 # tanh width for mask;
+
+dt = params.getfloat('dt') # timestep
+
+print(dt)
+print(Lx)
+print(Ly)
+print(vis)
+print(γ)
+print(hw)
+print(b)
+print(sigma)
+print(delta)
 
 # Initial body parameters
 x0,U0 = 0,0
@@ -63,13 +109,13 @@ K['g'], U['g'], V['g'] =  bdy.sheet(x, y, k, sigma, 0, delta, hw, b)
 # 2D Incompressible hydrodynamics
 problem = de.IVP(domain, variables=['p','u','v','ωz'])
 
-problem.parameters['ν']   = ν
+problem.parameters['vis']   = vis
 problem.parameters['γ']   = γ
 problem.parameters['K']   = K
 problem.parameters['U']   = U
 problem.parameters['V']   = V
-problem.add_equation("dt(u) + ν*dy(ωz) + dx(p) =  ωz*v -γ*K*(u-U)")
-problem.add_equation("dt(v) - ν*dx(ωz) + dy(p) = -ωz*u -γ*K*(v-V)")
+problem.add_equation("dt(u) + vis*dy(ωz) + dx(p) =  ωz*v -γ*K*(u-U)")
+problem.add_equation("dt(v) - vis*dx(ωz) + dy(p) = -ωz*u -γ*K*(v-V)")
 problem.add_equation("ωz + dy(u) - dx(v) = 0")
 problem.add_equation("dx(u) + dy(v) = 0",condition="(nx != 0) or (ny != 0)")
 problem.add_equation("p = 0",condition="(nx == 0) and (ny == 0)")
@@ -88,8 +134,16 @@ solver.stop_sim_time = 2*t_wave #np.inf
 solver.stop_wall_time = 10*60*60.
 solver.stop_iteration = np.inf
 
+# Output setting
+basedir = Path('output_data')
+outdir = "output_" + config_file.stem
+data_dir = basedir/outdir
+if domain.dist.comm.rank == 0:
+    if not data_dir.exists():
+        data_dir.mkdir(parents=True)
+
 # Analysis
-snapshots = solver.evaluator.add_file_handler('snapshots_test', iter=20, max_writes=50)
+snapshots = solver.evaluator.add_file_handler(os.path.join(data_dir,'snapshots'), iter=20, max_writes=50)
 snapshots.add_task("p")
 snapshots.add_task("u")
 snapshots.add_task("v")

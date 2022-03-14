@@ -5,7 +5,7 @@ def sheet(x,y,k,omega,t,delta,hw,b,center=(0, 0)):
     x -= center[0]
     y -= center[1]
     yy_pos = y + b*np.sin(k*x - omega*t)
-    pos = 0.5*(erf((yy_pos+hw)/delta) - erf((yy_pos-hw)/delta))
+    pos = 0.5*(erf((yy_pos+hw)/delta) - erf((yy_pos-hw)/delta))* (erf((x+15*hw)/delta) - erf((x-15*hw)/delta))
 
 
     x_vel = omega*(
