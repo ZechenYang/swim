@@ -22,7 +22,7 @@ def main(filename, start, count, output):
     """Save plot of specified tasks for given range of analysis writes."""
 
     # Plot settings
-    tasks = ['p','u','v','ωz']
+    tasks = ['p','u','v','K']
     scale = 1.
     dpi = 100
     title_func = lambda sim_time: 't = {:.3f}'.format(sim_time)
@@ -47,7 +47,7 @@ def main(filename, start, count, output):
                 dset = file['tasks'][task]
                 image_axes = (1, 2)
                 data_slices = [index, slice(None), slice(None)]
-                plot_tools.plot_bot(dset, image_axes, data_slices, axes=axes, title=task, clim=[-1,1])
+                plot_tools.plot_bot(dset, image_axes, data_slices, axes=axes, title=task)
             # Add time title
             title = title_func(file['scales/sim_time'][index])
             title_height = 1 - 0.5 * mfig.margin.top / mfig.fig.y

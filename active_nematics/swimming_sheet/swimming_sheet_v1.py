@@ -77,16 +77,6 @@ k = 4*np.pi/Ly # wavenumber of sheet frequency (k in Taylor 1951 eq 1)
 
 dt = params.getfloat('dt') # timestep
 
-print(dt)
-print(Lx)
-print(Ly)
-print(vis)
-print(γ)
-print(hw)
-print(b)
-print(sigma)
-print(delta)
-
 # Initial body parameters
 x0,U0 = 0,0
 y0,V0 = 0,0
@@ -104,7 +94,7 @@ V = domain.new_field()
 K.set_scales(domain.dealias,keep_data=False)
 U.set_scales(domain.dealias,keep_data=False)
 V.set_scales(domain.dealias,keep_data=False)
-K['g'], U['g'], V['g'] =  bdy.sheet(x, y, k, sigma, 0, delta, hw, b)
+K['g'], U['g'], V['g'] =  bdy.sheet(x, y, k, sigma, 0, delta, hw, b, (x0, y0))
 
 # 2D Incompressible hydrodynamics
 problem = de.IVP(domain, variables=['p','u','v','ωz'])
@@ -160,9 +150,10 @@ analysis_tasks = []
 analysis_tasks.append(snapshots)
 
 # Tasks for force computation
-# force = flow_tools.GlobalFlowProperty(solver, cadence=1)
-# force.add_property("K*(v-V)", name='G0')
-# force.add_property("-y*K*(u-U)+x*K*(v-V)", name='T0')
+force = flow_tools.GlobalFlowProperty(solver, cadence=1)
+force.add_property("K*(v-V)", name='Fy')
+force.add_property("K*(u-U)", name='Fx')
+#force.add_property("-y*K*(u-U)+x*K*(v-V)", name='T0')
 
 # Main loop
 try:
@@ -170,11 +161,14 @@ try:
     start_time = time.time()
     while solver.ok:
         solver.step(dt)
-        #G0 = γ*force.volume_average('G0')
+        Fy_net = γ*force.volume_average('Fy')
+        Fx_net = γ*force.volume_average('Fx')
         #τ0 = γ*force.volume_average('T0') + y0*F0 - x0*G0
         #F0,G0,τ0 = F0/μ, G0/μ - gravity, τ0/(μ*I)
-        #y0 = y0 + V0*dt
-        #V0 = V0 + G0*dt
+        x0 = x0 + U0*dt
+        y0 = y0 + V0*dt
+        U0 = U0 + Fx_net*dt
+        V0 = V0 + Fy_net*dt       
         K['g'], U['g'], V['g'] =  bdy.sheet(x, y, k, sigma, solver.sim_time, delta, hw, b)
         if (solver.iteration-1) % 20 == 0:
             logger.info('Iteration: %i, Time: %e, dt: %e' %(solver.iteration, solver.sim_time, dt))
